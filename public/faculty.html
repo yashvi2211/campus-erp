@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus ERP — Faculty</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">Campus ERP · Faculty</div>
+    <div class="user-info">
+      <span id="userName"></span>
+      <button class="secondary small" onclick="Auth.logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <h3>My Subjects</h3>
+      <label>Select subject to enter marks</label>
+      <select id="subjectSelect"></select>
+    </div>
+
+    <div class="card">
+      <h3>Students &amp; Marks <span id="subjectLabel" style="color:var(--muted); font-weight:400; font-size:13px;"></span></h3>
+      <div class="error-msg" id="marksErr"></div>
+      <div class="success-msg" id="marksOk"></div>
+      <table id="marksTable">
+        <thead>
+          <tr><th>Roll No</th><th>Name</th><th>Internal (0-30)</th><th>External (0-70)</th><th>Total</th><th>Grade</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    const user = Auth.requireRole('faculty');
+    if (user) document.getElementById('userName').textContent = user.name;
+
+    let subjects = [];
+
+    async function loadSubjects() {
+      const { subjects: subs } = await api('/faculty/subjects');
+      subjects = subs;
+      const sel = document.getElementById('subjectSelect');
+      sel.innerHTML = subs.map(s => `<option value="${s.id}">${s.code} - ${s.name} (Sem ${s.semester}, ${s.credits} credits)</option>`).join('');
+      if (subs.length) loadStudents(subs[0].id);
+    }
+
+    async function loadStudents(subjectId) {
+      const subject = subjects.find(s => s.id == subjectId);
+      document.getElementById('subjectLabel').textContent = subject ? `— ${subject.code}` : '';
+      const { students } = await api(`/faculty/subjects/${subjectId}/students`);
+      const tbody = document.querySelector('#marksTable tbody');
+      tbody.innerHTML = '';
+
+      students.forEach(stu => {
+        const internalInput = el('input', { type: 'number', min: '0', max: '30', value: stu.internal_marks ?? 0, style: 'width:70px' });
+        const externalInput = el('input', { type: 'number', min: '0', max: '70', value: stu.external_marks ?? 0, style: 'width:70px' });
+        const totalCell = el('td', { text: String(stu.total ?? 0) });
+        const gradeCell = el('td', { text: stu.grade || '-' });
+
+        const saveBtn = el('button', {
+          class: 'small', text: 'Save',
+          onclick: async () => {
+            const errBox = document.getElementById('marksErr');
+            const okBox = document.getElementById('marksOk');
+            errBox.textContent = ''; okBox.textContent = '';
+            try {
+              const result = await api('/faculty/marks', {
+                method: 'POST',
+                body: {
+                  student_id: stu.student_id,
+                  subject_id: Number(subjectId),
+                  semester: stu.semester,
+                  internal_marks: internalInput.value,
+                  external_marks: externalInput.value,
+                },
+              });
+              totalCell.textContent = result.total;
+              gradeCell.textContent = result.grade;
+              okBox.textContent = `Saved marks for ${stu.name}.`;
+            } catch (err) { errBox.textContent = err.message; }
+          },
+        });
+
+        const tr = el('tr', {}, [
+          el('td', { text: stu.roll_no || '-' }),
+          el('td', { text: stu.name }),
+          el('td', {}, internalInput),
+          el('td', {}, externalInput),
+          totalCell,
+          gradeCell,
+          el('td', {}, saveBtn),
+        ]);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('subjectSelect').addEventListener('change', (e) => loadStudents(e.target.value));
+
+    loadSubjects();
+  </script>
+</body>
+</html>

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus ERP — Admin</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">Campus ERP · Admin</div>
+    <div class="user-info">
+      <span id="userName"></span>
+      <button class="secondary small" onclick="Auth.logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <div class="tab active" data-tab="users">Users</div>
+      <div class="tab" data-tab="subjects">Subjects</div>
+      <div class="tab" data-tab="assign">Faculty Assignment</div>
+      <div class="tab" data-tab="enroll">Student Enrollment</div>
+    </div>
+
+    <!-- USERS TAB -->
+    <div class="tab-panel" id="panel-users">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Create User</h3>
+          <form id="userForm">
+            <label>Name</label>
+            <input id="u_name" required>
+            <label>Email</label>
+            <input id="u_email" type="email" required>
+            <label>Password</label>
+            <input id="u_password" type="password" required>
+            <label>Role</label>
+            <select id="u_role">
+              <option value="student">Student</option>
+              <option value="faculty">Faculty</option>
+              <option value="admin">Admin</option>
+            </select>
+            <div id="rollWrap">
+              <label>Roll No (students only)</label>
+              <input id="u_roll">
+            </div>
+            <label>Department</label>
+            <input id="u_dept">
+            <div class="error-msg" id="userErr"></div>
+            <div class="success-msg" id="userOk"></div>
+            <button type="submit">Create User</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h3>All Users</h3>
+          <table id="usersTable">
+            <thead><tr><th>Name</th><th>Role</th><th>Roll No</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBJECTS TAB -->
+    <div class="tab-panel" id="panel-subjects" style="display:none">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Create Subject</h3>
+          <form id="subjectForm">
+            <label>Code</label>
+            <input id="s_code" required placeholder="e.g. CS101">
+            <label>Name</label>
+            <input id="s_name" required>
+            <label>Credits</label>
+            <input id="s_credits" type="number" min="1" max="10" required>
+            <label>Semester</label>
+            <input id="s_semester" type="number" min="1" max="12" required>
+            <div class="error-msg" id="subjectErr"></div>
+            <button type="submit">Create Subject</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>All Subjects</h3>
+          <table id="subjectsTable">
+            <thead><tr><th>Code</th><th>Name</th><th>Credits</th><th>Sem</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ASSIGN TAB -->
+    <div class="tab-panel" id="panel-assign" style="display:none">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Assign Faculty to Subject</h3>
+          <form id="assignForm">
+            <label>Faculty</label>
+            <select id="a_faculty"></select>
+            <label>Subject</label>
+            <select id="a_subject"></select>
+            <div class="error-msg" id="assignErr"></div>
+            <button type="submit">Assign</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>Current Assignments</h3>
+          <table id="assignTable">
+            <thead><tr><th>Faculty</th><th>Subject</th><th>Sem</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ENROLL TAB -->
+    <div class="tab-panel" id="panel-enroll" style="display:none">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Enroll Student in Subject</h3>
+          <form id="enrollForm">
+            <label>Student</label>
+            <select id="e_student"></select>
+            <label>Subject</label>
+            <select id="e_subject"></select>
+            <label>Semester</label>
+            <input id="e_semester" type="number" min="1" max="12" required>
+            <div class="error-msg" id="enrollErr"></div>
+            <button type="submit">Enroll</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>Current Enrollments</h3>
+          <table id="enrollTable">
+            <thead><tr><th>Student</th><th>Subject</th><th>Sem</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    const user = Auth.requireRole('admin');
+    if (user) document.getElementById('userName').textContent = user.name;
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.tab).style.display = 'block';
+      });
+    });
+
+    document.getElementById('u_role').addEventListener('change', (e) => {
+      document.getElementById('rollWrap').style.display = e.target.value === 'student' ? 'block' : 'none';
+    });
+
+    let allUsers = [], allSubjects = [];
+
+    async function loadUsers() {
+      const { users } = await api('/admin/users');
+      allUsers = users;
+      const tbody = document.querySelector('#usersTable tbody');
+      tbody.innerHTML = '';
+      users.forEach(u => {
+        const tr = el('tr', {}, [
+          el('td', { text: u.name }),
+          el('td', {}, el('span', { class: 'badge', text: u.role })),
+          el('td', { text: u.roll_no || '-' }),
+          el('td', {}, el('button', { class: 'danger small', onclick: async () => { await api(`/admin/users/${u.id}`, { method: 'DELETE' }); loadUsers(); refreshSelects(); } , text: 'Delete' })),
+        ]);
+        tbody.appendChild(tr);
+      });
+      refreshSelects();
+    }
+
+    async function loadSubjects() {
+      const { subjects } = await api('/admin/subjects');
+      allSubjects = subjects;
+      const tbody = document.querySelector('#subjectsTable tbody');
+      tbody.innerHTML = '';
+      subjects.forEach(s => {
+        const tr = el('tr', {}, [
+          el('td', { text: s.code }),
+          el('td', { text: s.name }),
+          el('td', { text: String(s.credits) }),
+          el('td', { text: String(s.semester) }),
+          el('td', {}, el('button', { class: 'danger small', onclick: async () => { await api(`/admin/subjects/${s.id}`, { method: 'DELETE' }); loadSubjects(); } , text: 'Delete' })),
+        ]);
+        tbody.appendChild(tr);
+      });
+      refreshSelects();
+    }
+
+    function refreshSelects() {
+      const faculty = allUsers.filter(u => u.role === 'faculty');
+      const students = allUsers.filter(u => u.role === 'student');
+
+      const facSel = document.getElementById('a_faculty');
+      facSel.innerHTML = faculty.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+
+      const stuSel = document.getElementById('e_student');
+      stuSel.innerHTML = students.map(s => `<option value="${s.id}">${s.name} (${s.roll_no || ''})</option>`).join('');
+
+      const subOptions = allSubjects.map(s => `<option value="${s.id}">${s.code} - ${s.name} (Sem ${s.semester})</option>`).join('');
+      document.getElementById('a_subject').innerHTML = subOptions;
+      document.getElementById('e_subject').innerHTML = subOptions;
+    }
+
+    async function loadAssignments() {
+      const { assignments } = await api('/admin/faculty-subjects');
+      const tbody = document.querySelector('#assignTable tbody');
+      tbody.innerHTML = '';
+      assignments.forEach(a => {
+        const tr = el('tr', {}, [
+          el('td', { text: a.faculty_name }),
+          el('td', { text: `${a.code} - ${a.subject_name}` }),
+          el('td', { text: String(a.semester) }),
+          el('td', {}, el('button', { class: 'danger small', onclick: async () => { await api(`/admin/assign-faculty/${a.id}`, { method: 'DELETE' }); loadAssignments(); }, text: 'Remove' })),
+        ]);
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadEnrollments() {
+      const { enrollments } = await api('/admin/enrollments');
+      const tbody = document.querySelector('#enrollTable tbody');
+      tbody.innerHTML = '';
+      enrollments.forEach(en => {
+        const tr = el('tr', {}, [
+          el('td', { text: `${en.student_name} (${en.roll_no})` }),
+          el('td', { text: `${en.code} - ${en.subject_name}` }),
+          el('td', { text: String(en.semester) }),
+          el('td', {}, el('button', { class: 'danger small', onclick: async () => { await api(`/admin/enroll/${en.id}`, { method: 'DELETE' }); loadEnrollments(); }, text: 'Remove' })),
+        ]);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('userForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('userErr');
+      const okBox = document.getElementById('userOk');
+      errBox.textContent = ''; okBox.textContent = '';
+      try {
+        await api('/admin/users', {
+          method: 'POST',
+          body: {
+            name: document.getElementById('u_name').value,
+            email: document.getElementById('u_email').value,
+            password: document.getElementById('u_password').value,
+            role: document.getElementById('u_role').value,
+            roll_no: document.getElementById('u_roll').value || null,
+            department: document.getElementById('u_dept').value || null,
+          },
+        });
+        okBox.textContent = 'User created.';
+        e.target.reset();
+        loadUsers();
+      } catch (err) { errBox.textContent = err.message; }
+    });
+
+    document.getElementById('subjectForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('subjectErr');
+      errBox.textContent = '';
+      try {
+        await api('/admin/subjects', {
+          method: 'POST',
+          body: {
+            code: document.getElementById('s_code').value,
+            name: document.getElementById('s_name').value,
+            credits: document.getElementById('s_credits').value,
+            semester: document.getElementById('s_semester').value,
+          },
+        });
+        e.target.reset();
+        loadSubjects();
+      } catch (err) { errBox.textContent = err.message; }
+    });
+
+    document.getElementById('assignForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('assignErr');
+      errBox.textContent = '';
+      try {
+        await api('/admin/assign-faculty', {
+          method: 'POST',
+          body: { faculty_id: document.getElementById('a_faculty').value, subject_id: document.getElementById('a_subject').value },
+        });
+        loadAssignments();
+      } catch (err) { errBox.textContent = err.message; }
+    });
+
+    document.getElementById('enrollForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('enrollErr');
+      errBox.textContent = '';
+      try {
+        await api('/admin/enroll', {
+          method: 'POST',
+          body: {
+            student_id: document.getElementById('e_student').value,
+            subject_id: document.getElementById('e_subject').value,
+            semester: document.getElementById('e_semester').value,
+          },
+        });
+        loadEnrollments();
+      } catch (err) { errBox.textContent = err.message; }
+    });
+
+    (async function init() {
+      await loadUsers();
+      await loadSubjects();
+      await loadAssignments();
+      await loadEnrollments();
+    })();
+  </script>
+</body>
+</html>

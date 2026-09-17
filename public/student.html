@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus ERP — Student</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">Campus ERP · Student</div>
+    <div class="user-info">
+      <span id="userName"></span>
+      <button class="secondary small" onclick="Auth.logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="grid-2">
+      <div class="card stat">
+        <div class="lbl">Overall CGPA</div>
+        <div class="num" id="cgpaVal">–</div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Download Marksheet</h3>
+        <label>Semester (single semester PDF)</label>
+        <select id="semSelect"></select>
+        <button id="downloadSemBtn">Download Semester Marksheet</button>
+        <button class="secondary" id="downloadFullBtn">Download Consolidated Marksheet (All Semesters)</button>
+        <div class="error-msg" id="dlErr"></div>
+      </div>
+    </div>
+
+    <div id="semestersContainer"></div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    const user = Auth.requireRole('student');
+    if (user) document.getElementById('userName').textContent = user.name;
+
+    async function loadCgpa() {
+      const { cgpa, perSemester } = await api('/student/cgpa');
+      document.getElementById('cgpaVal').textContent = cgpa || '0.00';
+      const semSelect = document.getElementById('semSelect');
+      semSelect.innerHTML = perSemester.map(p => `<option value="${p.semester}">Semester ${p.semester} (SGPA: ${p.sgpa})</option>`).join('');
+    }
+
+    async function loadMarks() {
+      const { marksBySemester } = await api('/student/marks');
+      const container = document.getElementById('semestersContainer');
+      container.innerHTML = '';
+
+      Object.keys(marksBySemester).sort((a, b) => a - b).forEach(sem => {
+        const rows = marksBySemester[sem];
+        const card = el('div', { class: 'card' });
+        card.appendChild(el('h3', { text: `Semester ${sem}` }));
+
+        const table = el('table');
+        table.appendChild(el('thead', {}, el('tr', {}, [
+          el('th', { text: 'Code' }), el('th', { text: 'Subject' }), el('th', { text: 'Credits' }),
+          el('th', { text: 'Internal' }), el('th', { text: 'External' }), el('th', { text: 'Total' }), el('th', { text: 'Grade' }),
+        ])));
+        const tbody = el('tbody');
+        rows.forEach(r => {
+          tbody.appendChild(el('tr', {}, [
+            el('td', { text: r.code }),
+            el('td', { text: r.subject_name }),
+            el('td', { text: String(r.credits) }),
+            el('td', { text: String(r.internal_marks ?? 0) }),
+            el('td', { text: String(r.external_marks ?? 0) }),
+            el('td', { text: String(r.total ?? 0) }),
+            el('td', {}, el('span', { class: 'badge', text: r.grade || '-' })),
+          ]));
+        });
+        table.appendChild(tbody);
+        card.appendChild(table);
+        container.appendChild(card);
+      });
+    }
+
+    document.getElementById('downloadSemBtn').addEventListener('click', async () => {
+      const errBox = document.getElementById('dlErr');
+      errBox.textContent = '';
+      const sem = document.getElementById('semSelect').value;
+      try {
+        const blob = await api(`/marksheet/${user.id}/${sem}`, { isBlob: true });
+        downloadBlob(blob, `marksheet_sem${sem}.pdf`);
+      } catch (err) { errBox.textContent = 'Could not download marksheet.'; }
+    });
+
+    document.getElementById('downloadFullBtn').addEventListener('click', async () => {
+      const errBox = document.getElementById('dlErr');
+      errBox.textContent = '';
+      try {
+        const blob = await api(`/marksheet/${user.id}/full/consolidated`, { isBlob: true });
+        downloadBlob(blob, `marksheet_consolidated.pdf`);
+      } catch (err) { errBox.textContent = 'Could not download marksheet.'; }
+    });
+
+    (async function init() {
+      await loadCgpa();
+      await loadMarks();
+    })();
+  </script>
+</body>
+</html>

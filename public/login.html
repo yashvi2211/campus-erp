@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campus ERP — Login</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="card login-card">
+      <h2>Campus ERP</h2>
+      <p style="color:var(--muted); font-size:13px; margin-top:-8px;">Sign in to continue</p>
+
+      <form id="loginForm">
+        <label for="email">Email</label>
+        <input type="email" id="email" required placeholder="you@campus.edu">
+
+        <label for="password">Password</label>
+        <input type="password" id="password" required placeholder="••••••••">
+
+        <div class="error-msg" id="errorMsg"></div>
+        <button type="submit" style="width:100%">Sign In</button>
+      </form>
+
+      <div style="margin-top:18px; font-size:12px; color:var(--muted); line-height:1.6;">
+        <strong>Demo accounts</strong> (run <code>npm run seed</code> first):<br>
+        Admin: admin@campus.edu / Admin@123<br>
+        Faculty: anita.sharma@campus.edu / Faculty@123<br>
+        Student: aarav.mehta@campus.edu / Student@123
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.textContent = '';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Login failed');
+
+        Auth.setSession(data.token, data.user);
+        if (data.user.role === 'admin') window.location.href = '/admin.html';
+        else if (data.user.role === 'faculty') window.location.href = '/faculty.html';
+        else window.location.href = '/student.html';
+      } catch (err) {
+        errorMsg.textContent = err.message;
+      }
+    });
+
+    // If already logged in, redirect straight to the right dashboard
+    (function () {
+      const user = Auth.getUser();
+      if (user && Auth.getToken()) {
+        if (user.role === 'admin') window.location.href = '/admin.html';
+        else if (user.role === 'faculty') window.location.href = '/faculty.html';
+        else window.location.href = '/student.html';
+      }
+    })();
+  </script>
+</body>
+</html>
